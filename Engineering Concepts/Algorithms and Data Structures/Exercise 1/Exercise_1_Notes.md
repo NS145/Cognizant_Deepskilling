@@ -25,6 +25,97 @@ Why HashMap?
 
 ---
 
+## Product Class
+
+```java
+class Product {
+
+    int productId;
+    String productName;
+    int quantity;
+    double price;
+
+    Product(int productId, String productName, int quantity, double price) {
+        this.productId = productId;
+        this.productName = productName;
+        this.quantity = quantity;
+        this.price = price;
+    }
+
+    @Override
+    public String toString() {
+        return "ID: " + productId +
+                ", Name: " + productName +
+                ", Quantity: " + quantity +
+                ", Price: ₹" + price;
+    }
+}
+```
+
+---
+
+## InventoryManagement.java
+
+```java
+import java.util.HashMap;
+
+public class InventoryManagement {
+
+    static HashMap<Integer, Product> inventory = new HashMap<>();
+
+    static void addProduct(Product product) {
+        inventory.put(product.productId, product);
+        System.out.println("Product Added Successfully.");
+    }
+
+    static void updateProduct(int id, int quantity, double price) {
+
+        Product p = inventory.get(id);
+
+        if (p != null) {
+            p.quantity = quantity;
+            p.price = price;
+            System.out.println("Product Updated.");
+        } else {
+            System.out.println("Product Not Found.");
+        }
+    }
+
+    static void deleteProduct(int id) {
+
+        if (inventory.remove(id) != null)
+            System.out.println("Product Deleted.");
+        else
+            System.out.println("Product Not Found.");
+    }
+
+    static void displayProducts() {
+
+        System.out.println("\nInventory");
+
+        for (Product p : inventory.values())
+            System.out.println(p);
+    }
+
+    public static void main(String[] args) {
+
+        addProduct(new Product(101, "Laptop", 10, 65000));
+        addProduct(new Product(102, "Keyboard", 20, 1500));
+        addProduct(new Product(103, "Mouse", 30, 700));
+
+        displayProducts();
+
+        updateProduct(102, 25, 1700);
+
+        deleteProduct(103);
+
+        displayProducts();
+    }
+}
+```
+
+---
+
 ## Sample Output
 
 ```
