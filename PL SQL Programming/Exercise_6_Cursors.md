@@ -2,142 +2,116 @@
 
 ## Scenario 1
 **Generate monthly statements for all customers.**  
-**Question:** Write a PL/SQL (now MySQL) block using an explicit cursor `GenerateMonthlyStatements` that retrieves all transactions for the current month and prints a statement for each customer.
+**Question:** Write a PL/SQL block using an explicit cursor `GenerateMonthlyStatements` that retrieves all transactions for the current month and prints a statement for each customer.
 
 ### Solution
-```mysql
-DELIMITER //
-
-CREATE PROCEDURE GenerateMonthlyStatements()
-BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE v_name VARCHAR(100);
-    DECLARE v_account_id INT;
-    DECLARE v_date DATE;
-    DECLARE v_amount DECIMAL(15,2);
-    DECLARE v_type VARCHAR(20);
-    
-    DECLARE cur CURSOR FOR 
+```sql
+DECLARE
+    CURSOR GenerateMonthlyStatements IS
         SELECT c.Name, a.AccountID, t.TransactionDate, t.Amount, t.TransactionType
         FROM Customers c
         JOIN Accounts a ON c.CustomerID = a.CustomerID
         JOIN Transactions t ON a.AccountID = t.AccountID
-        WHERE MONTH(t.TransactionDate) = MONTH(CURDATE())
-          AND YEAR(t.TransactionDate) = YEAR(CURDATE())
+        WHERE EXTRACT(MONTH FROM t.TransactionDate) = EXTRACT(MONTH FROM SYSDATE)
+          AND EXTRACT(YEAR FROM t.TransactionDate) = EXTRACT(YEAR FROM SYSDATE)
         ORDER BY c.Name, a.AccountID, t.TransactionDate;
         
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-    
-    OPEN cur;
-    
-    read_loop: LOOP
-        FETCH cur INTO v_name, v_account_id, v_date, v_amount, v_type;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
+    v_record GenerateMonthlyStatements%ROWTYPE;
+BEGIN
+    OPEN GenerateMonthlyStatements;
+    LOOP
+        FETCH GenerateMonthlyStatements INTO v_record;
+        EXIT WHEN GenerateMonthlyStatements%NOTFOUND;
         
-        -- Print the statement using SELECT
-        SELECT CONCAT('Customer: ', v_name, ' | Account: ', v_account_id, ' | Date: ', v_date, ' | Type: ', v_type, ' | Amount: $', v_amount) AS Statement;
+        DBMS_OUTPUT.PUT_LINE(
+            'Customer: ' || v_record.Name || 
+            ' | Account: ' || v_record.AccountID ||
+            ' | Date: ' || TO_CHAR(v_record.TransactionDate, 'YYYY-MM-DD') ||
+            ' | Type: ' || v_record.TransactionType ||
+            ' | Amount: $' || v_record.Amount
+        );
     END LOOP;
-    
-    CLOSE cur;
-END //
-
-DELIMITER ;
+    CLOSE GenerateMonthlyStatements;
+END;
+/
 ```
 
 ---
 
 ## Scenario 2
 **Apply annual fee to all accounts.**  
-**Question:** Write a PL/SQL (now MySQL) block using an explicit cursor `ApplyAnnualFee` that deducts an annual maintenance fee from the balance of all accounts.
+**Question:** Write a PL/SQL block using an explicit cursor `ApplyAnnualFee` that deducts an annual maintenance fee from the balance of all accounts.
 
 ### Solution
-*Note: MySQL does not support `WHERE CURRENT OF` for updating via cursors. We must fetch the Primary Key explicitly.*
-
-```mysql
-DELIMITER //
-
-CREATE PROCEDURE ApplyAnnualFee()
-BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE v_annual_fee DECIMAL(10,2) DEFAULT 50.00; 
-    DECLARE v_account_id INT;
+```sql
+DECLARE
+    v_annual_fee CONSTANT NUMBER := 50; -- Define the annual fee amount
     
-    DECLARE cur CURSOR FOR SELECT AccountID FROM Accounts;
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-    
-    START TRANSACTION;
-    OPEN cur;
-    
-    read_loop: LOOP
-        FETCH cur INTO v_account_id;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
+    -- Cursor for updating accounts
+    CURSOR ApplyAnnualFee IS
+        SELECT AccountID, Balance FROM Accounts FOR UPDATE OF Balance, LastModified;
         
-        -- Update the specific row by ID
+    v_account_id Accounts.AccountID%TYPE;
+    v_balance Accounts.Balance%TYPE;
+BEGIN
+    OPEN ApplyAnnualFee;
+    LOOP
+        FETCH ApplyAnnualFee INTO v_account_id, v_balance;
+        EXIT WHEN ApplyAnnualFee%NOTFOUND;
+        
+        -- Update the specific row retrieved by the cursor
         UPDATE Accounts
         SET Balance = Balance - v_annual_fee,
-            LastModified = CURDATE()
-        WHERE AccountID = v_account_id;
+            LastModified = SYSDATE
+        WHERE CURRENT OF ApplyAnnualFee;
     END LOOP;
+    CLOSE ApplyAnnualFee;
     
-    CLOSE cur;
     COMMIT;
-    
-    SELECT 'Annual fee applied successfully to all accounts.' AS Result;
-END //
-
-DELIMITER ;
+    DBMS_OUTPUT.PUT_LINE('Annual fee applied successfully to all accounts.');
+END;
+/
 ```
 
 ---
 
 ## Scenario 3
 **Update the interest rate for all loans based on a new policy.**  
-**Question:** Write a PL/SQL (now MySQL) block using an explicit cursor `UpdateLoanInterestRates` that fetches all loans and updates their interest rates based on the new policy.
+**Question:** Write a PL/SQL block using an explicit cursor `UpdateLoanInterestRates` that fetches all loans and updates their interest rates based on the new policy.
 
 ### Solution
-```mysql
-DELIMITER //
-
-CREATE PROCEDURE UpdateLoanInterestRates()
+```sql
+DECLARE
+    -- Cursor to lock the loan rows for update
+    CURSOR UpdateLoanInterestRates IS
+        SELECT LoanID, LoanAmount FROM Loans FOR UPDATE OF InterestRate;
+        
+    v_loan_id Loans.LoanID%TYPE;
+    v_loan_amount Loans.LoanAmount%TYPE;
+    v_new_rate NUMBER;
 BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE v_loan_id INT;
-    DECLARE v_loan_amount DECIMAL(15,2);
-    DECLARE v_new_rate DECIMAL(5,2);
-    
-    DECLARE cur CURSOR FOR SELECT LoanID, LoanAmount FROM Loans FOR UPDATE;
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-    
-    START TRANSACTION;
-    OPEN cur;
-    
-    read_loop: LOOP
-        FETCH cur INTO v_loan_id, v_loan_amount;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
+    OPEN UpdateLoanInterestRates;
+    LOOP
+        FETCH UpdateLoanInterestRates INTO v_loan_id, v_loan_amount;
+        EXIT WHEN UpdateLoanInterestRates%NOTFOUND;
         
-        -- Policy Rules
+        -- Apply the new policy rules to determine the interest rate
+        -- Example logic: 4.5% if the loan is > $10,000, else 5.5%
         IF v_loan_amount > 10000 THEN
-            SET v_new_rate = 4.5;
+            v_new_rate := 4.5;
         ELSE
-            SET v_new_rate = 5.5;
+            v_new_rate := 5.5;
         END IF;
         
+        -- Perform the update on the current cursor row
         UPDATE Loans
         SET InterestRate = v_new_rate
-        WHERE LoanID = v_loan_id;
+        WHERE CURRENT OF UpdateLoanInterestRates;
     END LOOP;
+    CLOSE UpdateLoanInterestRates;
     
-    CLOSE cur;
     COMMIT;
-    
-    SELECT 'Loan interest rates updated based on the new policy.' AS Result;
-END //
-
-DELIMITER ;
+    DBMS_OUTPUT.PUT_LINE('Loan interest rates updated based on the new policy.');
+END;
+/
 ```

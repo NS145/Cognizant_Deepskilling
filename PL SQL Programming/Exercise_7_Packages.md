@@ -1,53 +1,47 @@
 # Exercise 7: Packages
 
-## MySQL Alternative to Packages
-*Note: MySQL does not natively support "Packages" (which are an Oracle PL/SQL feature). To achieve the same modularity and grouping in MySQL, it is standard practice to create independent stored procedures and functions using a **common naming prefix** (e.g., `CustomerManagement_`).*
-
----
-
 ## Scenario 1
 **Group all customer-related procedures and functions into a package.**  
 **Question:** Create a package `CustomerManagement` with procedures for adding a new customer, updating customer details, and a function to get customer balance.
 
 ### Solution
-```mysql
-DELIMITER //
+```sql
+-- 1. Create the Package Specification
+CREATE OR REPLACE PACKAGE CustomerManagement AS
+    PROCEDURE AddCustomer(p_id NUMBER, p_name VARCHAR2, p_dob DATE, p_balance NUMBER);
+    PROCEDURE UpdateCustomer(p_id NUMBER, p_name VARCHAR2);
+    FUNCTION GetBalance(p_id NUMBER) RETURN NUMBER;
+END CustomerManagement;
+/
 
--- Procedure: AddCustomer
-CREATE PROCEDURE CustomerManagement_AddCustomer(
-    IN p_id INT, 
-    IN p_name VARCHAR(100), 
-    IN p_dob DATE, 
-    IN p_balance DECIMAL(15,2)
-)
-BEGIN
-    INSERT INTO Customers (CustomerID, Name, DOB, Balance, LastModified)
-    VALUES (p_id, p_name, p_dob, p_balance, CURDATE());
-END //
-
--- Procedure: UpdateCustomer
-CREATE PROCEDURE CustomerManagement_UpdateCustomer(
-    IN p_id INT, 
-    IN p_name VARCHAR(100)
-)
-BEGIN
-    UPDATE Customers
-    SET Name = p_name, LastModified = CURDATE()
-    WHERE CustomerID = p_id;
-END //
-
--- Function: GetBalance
-CREATE FUNCTION CustomerManagement_GetBalance(p_id INT) 
-RETURNS DECIMAL(15,2)
-READS SQL DATA
-BEGIN
-    DECLARE v_balance DECIMAL(15,2);
+-- 2. Create the Package Body
+CREATE OR REPLACE PACKAGE BODY CustomerManagement AS
+    PROCEDURE AddCustomer(p_id NUMBER, p_name VARCHAR2, p_dob DATE, p_balance NUMBER) IS
+    BEGIN
+        INSERT INTO Customers (CustomerID, Name, DOB, Balance, LastModified)
+        VALUES (p_id, p_name, p_dob, p_balance, SYSDATE);
+        COMMIT;
+    END AddCustomer;
     
-    SELECT Balance INTO v_balance FROM Customers WHERE CustomerID = p_id;
-    RETURN v_balance;
-END //
-
-DELIMITER ;
+    PROCEDURE UpdateCustomer(p_id NUMBER, p_name VARCHAR2) IS
+    BEGIN
+        UPDATE Customers
+        SET Name = p_name, LastModified = SYSDATE
+        WHERE CustomerID = p_id;
+        COMMIT;
+    END UpdateCustomer;
+    
+    FUNCTION GetBalance(p_id NUMBER) RETURN NUMBER IS
+        v_balance NUMBER;
+    BEGIN
+        SELECT Balance INTO v_balance FROM Customers WHERE CustomerID = p_id;
+        RETURN v_balance;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RETURN NULL;
+    END GetBalance;
+END CustomerManagement;
+/
 ```
 
 ---
@@ -57,48 +51,43 @@ DELIMITER ;
 **Question:** Write a package `EmployeeManagement` with procedures to hire new employees, update employee details, and a function to calculate annual salary.
 
 ### Solution
-```mysql
-DELIMITER //
+```sql
+-- 1. Create the Package Specification
+CREATE OR REPLACE PACKAGE EmployeeManagement AS
+    PROCEDURE HireEmployee(p_id NUMBER, p_name VARCHAR2, p_position VARCHAR2, p_salary NUMBER, p_dept VARCHAR2, p_hire_date DATE);
+    PROCEDURE UpdateEmployee(p_id NUMBER, p_position VARCHAR2, p_salary NUMBER);
+    FUNCTION CalculateAnnualSalary(p_id NUMBER) RETURN NUMBER;
+END EmployeeManagement;
+/
 
--- Procedure: HireEmployee
-CREATE PROCEDURE EmployeeManagement_HireEmployee(
-    IN p_id INT, 
-    IN p_name VARCHAR(100), 
-    IN p_position VARCHAR(50), 
-    IN p_salary DECIMAL(15,2), 
-    IN p_dept VARCHAR(50), 
-    IN p_hire_date DATE
-)
-BEGIN
-    INSERT INTO Employees (EmployeeID, Name, Position, Salary, Department, HireDate)
-    VALUES (p_id, p_name, p_position, p_salary, p_dept, p_hire_date);
-END //
-
--- Procedure: UpdateEmployee
-CREATE PROCEDURE EmployeeManagement_UpdateEmployee(
-    IN p_id INT, 
-    IN p_position VARCHAR(50), 
-    IN p_salary DECIMAL(15,2)
-)
-BEGIN
-    UPDATE Employees
-    SET Position = p_position, Salary = p_salary
-    WHERE EmployeeID = p_id;
-END //
-
--- Function: CalculateAnnualSalary
-CREATE FUNCTION EmployeeManagement_CalculateAnnualSalary(p_id INT) 
-RETURNS DECIMAL(15,2)
-READS SQL DATA
-BEGIN
-    DECLARE v_monthly_salary DECIMAL(15,2);
+-- 2. Create the Package Body
+CREATE OR REPLACE PACKAGE BODY EmployeeManagement AS
+    PROCEDURE HireEmployee(p_id NUMBER, p_name VARCHAR2, p_position VARCHAR2, p_salary NUMBER, p_dept VARCHAR2, p_hire_date DATE) IS
+    BEGIN
+        INSERT INTO Employees (EmployeeID, Name, Position, Salary, Department, HireDate)
+        VALUES (p_id, p_name, p_position, p_salary, p_dept, p_hire_date);
+        COMMIT;
+    END HireEmployee;
     
-    SELECT Salary INTO v_monthly_salary FROM Employees WHERE EmployeeID = p_id;
-    -- Returning NULL if employee not found, otherwise annual salary
-    RETURN v_monthly_salary * 12;
-END //
-
-DELIMITER ;
+    PROCEDURE UpdateEmployee(p_id NUMBER, p_position VARCHAR2, p_salary NUMBER) IS
+    BEGIN
+        UPDATE Employees
+        SET Position = p_position, Salary = p_salary
+        WHERE EmployeeID = p_id;
+        COMMIT;
+    END UpdateEmployee;
+    
+    FUNCTION CalculateAnnualSalary(p_id NUMBER) RETURN NUMBER IS
+        v_monthly_salary NUMBER;
+    BEGIN
+        SELECT Salary INTO v_monthly_salary FROM Employees WHERE EmployeeID = p_id;
+        RETURN v_monthly_salary * 12;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RETURN NULL;
+    END CalculateAnnualSalary;
+END EmployeeManagement;
+/
 ```
 
 ---
@@ -108,40 +97,40 @@ DELIMITER ;
 **Question:** Create a package `AccountOperations` with procedures for opening a new account, closing an account, and a function to get the total balance of a customer across all accounts.
 
 ### Solution
-```mysql
-DELIMITER //
+```sql
+-- 1. Create the Package Specification
+CREATE OR REPLACE PACKAGE AccountOperations AS
+    PROCEDURE OpenAccount(p_acc_id NUMBER, p_cust_id NUMBER, p_type VARCHAR2, p_balance NUMBER);
+    PROCEDURE CloseAccount(p_acc_id NUMBER);
+    FUNCTION GetTotalCustomerBalance(p_cust_id NUMBER) RETURN NUMBER;
+END AccountOperations;
+/
 
--- Procedure: OpenAccount
-CREATE PROCEDURE AccountOperations_OpenAccount(
-    IN p_acc_id INT, 
-    IN p_cust_id INT, 
-    IN p_type VARCHAR(20), 
-    IN p_balance DECIMAL(15,2)
-)
-BEGIN
-    INSERT INTO Accounts (AccountID, CustomerID, AccountType, Balance, LastModified)
-    VALUES (p_acc_id, p_cust_id, p_type, p_balance, CURDATE());
-END //
-
--- Procedure: CloseAccount
-CREATE PROCEDURE AccountOperations_CloseAccount(IN p_acc_id INT)
-BEGIN
-    DELETE FROM Accounts WHERE AccountID = p_acc_id;
-END //
-
--- Function: GetTotalCustomerBalance
-CREATE FUNCTION AccountOperations_GetTotalCustomerBalance(p_cust_id INT) 
-RETURNS DECIMAL(15,2)
-READS SQL DATA
-BEGIN
-    DECLARE v_total DECIMAL(15,2);
+-- 2. Create the Package Body
+CREATE OR REPLACE PACKAGE BODY AccountOperations AS
+    PROCEDURE OpenAccount(p_acc_id NUMBER, p_cust_id NUMBER, p_type VARCHAR2, p_balance NUMBER) IS
+    BEGIN
+        INSERT INTO Accounts (AccountID, CustomerID, AccountType, Balance, LastModified)
+        VALUES (p_acc_id, p_cust_id, p_type, p_balance, SYSDATE);
+        COMMIT;
+    END OpenAccount;
     
-    SELECT SUM(Balance) INTO v_total 
-    FROM Accounts 
-    WHERE CustomerID = p_cust_id;
+    PROCEDURE CloseAccount(p_acc_id NUMBER) IS
+    BEGIN
+        DELETE FROM Accounts WHERE AccountID = p_acc_id;
+        COMMIT;
+    END CloseAccount;
     
-    RETURN IFNULL(v_total, 0);
-END //
-
-DELIMITER ;
+    FUNCTION GetTotalCustomerBalance(p_cust_id NUMBER) RETURN NUMBER IS
+        v_total NUMBER;
+    BEGIN
+        SELECT SUM(Balance) INTO v_total 
+        FROM Accounts 
+        WHERE CustomerID = p_cust_id;
+        
+        -- Handle NULL in case the customer has no accounts
+        RETURN NVL(v_total, 0);
+    END GetTotalCustomerBalance;
+END AccountOperations;
+/
 ```

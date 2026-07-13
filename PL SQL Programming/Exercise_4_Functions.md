@@ -5,20 +5,17 @@
 **Question:** Write a function `CalculateAge` that takes a customer's date of birth as input and returns their age in years.
 
 ### Solution
-```mysql
-DELIMITER //
-
-CREATE FUNCTION CalculateAge(
+```sql
+CREATE OR REPLACE FUNCTION CalculateAge (
     p_dob DATE
-) 
-RETURNS INT
-DETERMINISTIC
+) RETURN NUMBER IS
+    v_age NUMBER;
 BEGIN
-    -- Calculate difference in years
-    RETURN TIMESTAMPDIFF(YEAR, p_dob, CURDATE());
-END //
-
-DELIMITER ;
+    -- Calculate age by finding the difference in months and dividing by 12
+    v_age := TRUNC(MONTHS_BETWEEN(SYSDATE, p_dob) / 12);
+    RETURN v_age;
+END;
+/
 ```
 
 ---
@@ -28,37 +25,31 @@ DELIMITER ;
 **Question:** Write a function `CalculateMonthlyInstallment` that takes the loan amount, interest rate, and loan duration in years as input and returns the monthly installment amount.
 
 ### Solution
-```mysql
-DELIMITER //
-
-CREATE FUNCTION CalculateMonthlyInstallment(
-    p_loan_amount DECIMAL(15,2),
-    p_interest_rate DECIMAL(5,2),
-    p_duration_years INT
-) 
-RETURNS DECIMAL(15,2)
-DETERMINISTIC
+```sql
+CREATE OR REPLACE FUNCTION CalculateMonthlyInstallment (
+    p_loan_amount NUMBER,
+    p_interest_rate NUMBER,
+    p_duration_years NUMBER
+) RETURN NUMBER IS
+    v_monthly_rate NUMBER;
+    v_total_months NUMBER;
+    v_installment NUMBER;
 BEGIN
-    DECLARE v_monthly_rate DECIMAL(10,6);
-    DECLARE v_total_months INT;
-    DECLARE v_installment DECIMAL(15,2);
-    
-    -- Calculate monthly rate from the yearly percentage (e.g., 5 for 5%)
-    SET v_monthly_rate = (p_interest_rate / 100) / 12;
-    SET v_total_months = p_duration_years * 12;
+    -- Calculate monthly rate (interest rate is provided as a percentage, e.g., 5 for 5%)
+    v_monthly_rate := (p_interest_rate / 100) / 12;
+    v_total_months := p_duration_years * 12;
     
     -- Handle 0% interest case to prevent division by zero
     IF v_monthly_rate = 0 THEN
-        SET v_installment = p_loan_amount / v_total_months;
+        v_installment := p_loan_amount / v_total_months;
     ELSE
-        -- MySQL uses POW() instead of POWER()
-        SET v_installment = p_loan_amount * (v_monthly_rate * POW(1 + v_monthly_rate, v_total_months)) / (POW(1 + v_monthly_rate, v_total_months) - 1);
+        v_installment := p_loan_amount * (v_monthly_rate * POWER(1 + v_monthly_rate, v_total_months)) / (POWER(1 + v_monthly_rate, v_total_months) - 1);
     END IF;
     
+    -- Return the result rounded to 2 decimal places
     RETURN ROUND(v_installment, 2);
-END //
-
-DELIMITER ;
+END;
+/
 ```
 
 ---
@@ -68,31 +59,28 @@ DELIMITER ;
 **Question:** Write a function `HasSufficientBalance` that takes an account ID and an amount as input and returns a boolean indicating whether the account has at least the specified amount.
 
 ### Solution
-```mysql
-DELIMITER //
-
-CREATE FUNCTION HasSufficientBalance(
-    p_account_id INT,
-    p_amount DECIMAL(15,2)
-) 
-RETURNS BOOLEAN
-READS SQL DATA
+```sql
+CREATE OR REPLACE FUNCTION HasSufficientBalance (
+    p_account_id NUMBER,
+    p_amount NUMBER
+) RETURN BOOLEAN IS
+    v_balance NUMBER;
 BEGIN
-    DECLARE v_balance DECIMAL(15,2);
-    
     SELECT Balance INTO v_balance 
     FROM Accounts 
     WHERE AccountID = p_account_id;
     
-    IF v_balance IS NULL THEN
-        -- If account does not exist
-        RETURN FALSE;
-    ELSEIF v_balance >= p_amount THEN
+    IF v_balance >= p_amount THEN
         RETURN TRUE;
     ELSE
         RETURN FALSE;
     END IF;
-END //
-
-DELIMITER ;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        -- If account does not exist, return false
+        RETURN FALSE;
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+/
 ```

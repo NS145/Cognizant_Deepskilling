@@ -5,17 +5,14 @@
 **Question:** Write a trigger `UpdateCustomerLastModified` that updates the `LastModified` column of the Customers table to the current date whenever a customer's record is updated.
 
 ### Solution
-```mysql
-DELIMITER //
-
-CREATE TRIGGER UpdateCustomerLastModified
+```sql
+CREATE OR REPLACE TRIGGER UpdateCustomerLastModified
 BEFORE UPDATE ON Customers
 FOR EACH ROW
 BEGIN
-    SET NEW.LastModified = CURDATE();
-END //
-
-DELIMITER ;
+    :NEW.LastModified := SYSDATE;
+END;
+/
 ```
 
 ---
@@ -25,26 +22,25 @@ DELIMITER ;
 **Question:** Write a trigger `LogTransaction` that inserts a record into an AuditLog table whenever a transaction is inserted into the Transactions table.
 
 ### Solution
-*Note: This assumes the `AuditLog` table has an auto-incrementing ID column for the Primary Key, standard in MySQL.*
-```mysql
--- Assuming DDL:
--- CREATE TABLE AuditLog (LogID INT AUTO_INCREMENT PRIMARY KEY, TransactionID INT, ActionDate DATE, Description VARCHAR(255));
+*Note: This solution assumes an `AuditLog` table and a corresponding sequence have been created.*
+```sql
+-- DDL for AuditLog if it doesn't exist:
+-- CREATE TABLE AuditLog (LogID NUMBER PRIMARY KEY, TransactionID NUMBER, ActionDate DATE, Description VARCHAR2(255));
+-- CREATE SEQUENCE AUDIT_SEQ START WITH 1;
 
-DELIMITER //
-
-CREATE TRIGGER LogTransaction
+CREATE OR REPLACE TRIGGER LogTransaction
 AFTER INSERT ON Transactions
 FOR EACH ROW
 BEGIN
-    INSERT INTO AuditLog (TransactionID, ActionDate, Description)
+    INSERT INTO AuditLog (LogID, TransactionID, ActionDate, Description)
     VALUES (
-        NEW.TransactionID, 
-        CURDATE(), 
-        CONCAT('New transaction of type ', NEW.TransactionType, ' processed for Account ', NEW.AccountID)
+        AUDIT_SEQ.NEXTVAL, 
+        :NEW.TransactionID, 
+        SYSDATE, 
+        'New transaction of type ' || :NEW.TransactionType || ' processed for Account ' || :NEW.AccountID
     );
-END //
-
-DELIMITER ;
+END;
+/
 ```
 
 ---
@@ -54,31 +50,26 @@ DELIMITER ;
 **Question:** Write a trigger `CheckTransactionRules` that ensures withdrawals do not exceed the balance and deposits are positive before inserting a record into the Transactions table.
 
 ### Solution
-```mysql
-DELIMITER //
-
-CREATE TRIGGER CheckTransactionRules
+```sql
+CREATE OR REPLACE TRIGGER CheckTransactionRules
 BEFORE INSERT ON Transactions
 FOR EACH ROW
+DECLARE
+    v_balance NUMBER;
 BEGIN
-    DECLARE v_balance DECIMAL(15,2);
-    
-    IF NEW.TransactionType = 'Withdrawal' THEN
-        SELECT Balance INTO v_balance FROM Accounts WHERE AccountID = NEW.AccountID;
+    IF :NEW.TransactionType = 'Withdrawal' THEN
+        -- Fetch the current balance of the account
+        SELECT Balance INTO v_balance FROM Accounts WHERE AccountID = :NEW.AccountID;
         
-        IF NEW.Amount > v_balance THEN
-            -- Using SIGNAL to throw a custom error in MySQL
-            SIGNAL SQLSTATE '45000' 
-            SET MESSAGE_TEXT = 'Error: Withdrawal amount exceeds current account balance.';
+        IF :NEW.Amount > v_balance THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Error: Withdrawal amount exceeds current account balance.');
         END IF;
         
-    ELSEIF NEW.TransactionType = 'Deposit' THEN
-        IF NEW.Amount <= 0 THEN
-            SIGNAL SQLSTATE '45000' 
-            SET MESSAGE_TEXT = 'Error: Deposit amount must be a positive number.';
+    ELSIF :NEW.TransactionType = 'Deposit' THEN
+        IF :NEW.Amount <= 0 THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Error: Deposit amount must be a positive number.');
         END IF;
     END IF;
-END //
-
-DELIMITER ;
+END;
+/
 ```
